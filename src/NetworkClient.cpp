@@ -9,6 +9,7 @@
 #include <cstring>
 
 #include "Stream.h"
+#include "WiFi.h"
 
 struct NetworkClient::Impl {
   explicit Impl(int socketFd) : fd(socketFd) {}
@@ -56,6 +57,40 @@ int NetworkClient::connect(const char *host, uint16_t port) {
   impl_ = std::make_shared<Impl>(fd);
   return 1;
 }
+
+int NetworkClient::connect(const char *host, uint16_t port, int32_t /*timeoutMs*/) {
+  return connect(host, port);
+}
+
+int NetworkClient::connect(const IPAddress &addr, uint16_t port, int32_t /*timeoutMs*/) {
+  char host[16];
+  snprintf(host, sizeof(host), "%u.%u.%u.%u", addr[0], addr[1], addr[2], addr[3]);
+  return connect(host, port);
+}
+
+int NetworkClient::available() {
+  if (!impl_ || impl_->fd < 0)
+    return 0;
+  return 1;
+}
+
+int NetworkClient::read() {
+  uint8_t byte = 0;
+  if (read(&byte, 1) == 1)
+    return static_cast<int>(byte);
+  return -1;
+}
+
+int NetworkClient::read(uint8_t *buf, size_t size) {
+  if (!buf || size == 0 || !impl_ || impl_->fd < 0)
+    return -1;
+  const ssize_t n = ::recv(impl_->fd, buf, size, 0);
+  if (n < 0)
+    return -1;
+  return static_cast<int>(n);
+}
+
+IPAddress NetworkClient::remoteIP() { return IPAddress(127, 0, 0, 1); }
 
 size_t NetworkClient::write(const uint8_t *buf, size_t size) {
   if (!buf || size == 0)

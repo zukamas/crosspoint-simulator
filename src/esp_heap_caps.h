@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <cstring>
 
 #include "Arduino.h"
 
@@ -31,6 +32,18 @@ inline size_t heap_caps_get_total_size(const unsigned caps) {
 }
 
 inline void* heap_caps_malloc(const size_t size, unsigned /*caps*/) { return std::malloc(size); }
+
+inline void* heap_caps_calloc(const size_t n, const size_t size, unsigned /*caps*/) {
+  if (n == 0 || size == 0) {
+    return nullptr;
+  }
+  const size_t bytes = n * size;
+  void* p = std::malloc(bytes);
+  if (p) {
+    std::memset(p, 0, bytes);
+  }
+  return p;
+}
 
 inline void* heap_caps_realloc(void* ptr, const size_t size, unsigned /*caps*/) { return std::realloc(ptr, size); }
 

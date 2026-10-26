@@ -185,6 +185,19 @@ uint32_t HalFile::modificationTime() {
                                      : stat(impl->path.c_str(), &info);
   return result == 0 ? static_cast<uint32_t>(info.st_mtime) : 0;
 }
+
+bool HalFile::getModifyDateTime(uint16_t *date, uint16_t *time) {
+  if (!date || !time)
+    return false;
+  const uint32_t unixTime = modificationTime();
+  if (unixTime == 0)
+    return false;
+  // Stable fingerprint for sim: pack unix time (not FAT); matches GlyphBank mtimeOut layout.
+  *date = static_cast<uint16_t>((unixTime >> 16) & 0xFFFFu);
+  *time = static_cast<uint16_t>(unixTime & 0xFFFFu);
+  return true;
+}
+
 bool HalFile::seek(size_t pos) {
   if (!impl || impl->fd < 0)
     return false;
@@ -223,6 +236,17 @@ bool HalFile::truncate(uint64_t length) {
       length > static_cast<uint64_t>(std::numeric_limits<off_t>::max()))
     return false;
   return ftruncate(impl->fd, static_cast<off_t>(length)) == 0;
+}
+
+bool HalFile::truncate() {
+  if (!impl || impl->fd < 0) {
+    return false;
+  }
+  const off_t cur = lseek(impl->fd, 0, SEEK_CUR);
+  if (cur < 0) {
+    return false;
+  }
+  return ftruncate(impl->fd, cur) == 0;
 }
 int HalFile::available() const {
   if (!impl || impl->fd < 0)
@@ -332,6 +356,37 @@ bool HalFile::isOpen() const {
   return impl->isOpen();
 }
 HalFile::operator bool() const { return isOpen(); }
+
+void HalFile::move(HalFile *other) {
+  if (!other || other == this) {
+    return;
+  }
+  close();
+  impl = std::move(other->impl);
+  if (!other->impl) {
+    other->impl = std::unique_ptr<Impl>(new Impl());
+  }
+}
+
+bool HalFile::open(HalFile *dir, const char *path, int oflag) {
+  if (!dir || !dir->impl || !dir->impl->isDir() || !path || !*path) {
+    return false;
+  }
+  close();
+  std::string child = dir->impl->path;
+  if (child.empty()) {
+    return false;
+  }
+  if (child.back() != '/') {
+    child += '/';
+  }
+  child += path;
+  struct stat st;
+  if (stat(child.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
+    return impl->openAsDir(child.c_str());
+  }
+  return impl->open(child.c_str(), oflag);
+}
 
 HalFile HalStorage::open(const char *path, const oflag_t oflag) {
   std::string full = resolveStoragePath(path);

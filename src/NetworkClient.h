@@ -7,6 +7,7 @@
 #include "WString.h"
 #include "Print.h"
 
+class IPAddress;
 class Stream;
 
 class NetworkClient : public Print {
@@ -15,6 +16,8 @@ public:
   explicit NetworkClient(int fd);
   virtual ~NetworkClient() {}
   virtual int connect(const char *host, uint16_t port);
+  virtual int connect(const char *host, uint16_t port, int32_t timeoutMs);
+  virtual int connect(const IPAddress &addr, uint16_t port, int32_t timeoutMs);
   virtual size_t write(const uint8_t *buf, size_t size);
   virtual size_t write(const char *str) {
     return write((const uint8_t *)str, strlen(str));
@@ -35,8 +38,10 @@ public:
     }
     return total;
   }
-  virtual int available() { return 0; }
-  virtual int read() { return -1; }
+  virtual int available();
+  virtual int read();
+  virtual int read(uint8_t *buf, size_t size);
+  virtual IPAddress remoteIP();
   virtual void stop();
   virtual void clear() {}
   virtual uint8_t connected();

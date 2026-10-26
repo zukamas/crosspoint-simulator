@@ -4,12 +4,10 @@
 
 class SPIClass {};
 class FS {};
-class HalStorage {};
 
 ESPMock ESP;
 HWCDC Serial;
 SPIClass SPI;
 FS SD;
-HalStorage Storage;
 WiFiClass WiFi;
 MDNSClass MDNS;

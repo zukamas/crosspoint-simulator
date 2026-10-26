@@ -13,6 +13,8 @@ using arduino_event_id_t = int;
 using arduino_event_info_t = int;
 inline constexpr arduino_event_id_t ARDUINO_EVENT_WIFI_STA_START = 0;
 inline constexpr arduino_event_id_t ARDUINO_EVENT_WIFI_AP_START = 1;
+inline constexpr arduino_event_id_t ARDUINO_EVENT_WIFI_STA_DISCONNECTED = 2;
+inline constexpr arduino_event_id_t ARDUINO_EVENT_WIFI_STA_GOT_IP = 3;
 
 // On ESP32, WiFiClient is a TCP client backed by the WiFi stack.
 // In the simulator NetworkClient already provides the same interface.
@@ -173,6 +175,11 @@ class WiFiClass {
 public:
   template <typename Callback>
   void onEvent(Callback &&, arduino_event_id_t) {}
+
+  template <typename Callback>
+  void onEvent(Callback &&callback) {
+    (void)callback;
+  }
 
   wl_status_t begin(const char *ssid = nullptr, const char *pass = nullptr) {
     (void)pass;

@@ -69,13 +69,39 @@ public:
 
   void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH,
                      bool turnOffScreen = false);
+  template <typename Mode>
+  void displayBuffer(Mode mode, bool turnOffScreen = false) {
+    displayBuffer(static_cast<RefreshMode>(mode), turnOffScreen);
+  }
   void displayBufferAsync(RefreshMode mode = RefreshMode::FAST_REFRESH);
+  template <typename Mode>
+  void displayBufferAsync(Mode mode) {
+    displayBufferAsync(static_cast<RefreshMode>(mode));
+  }
   void waitRefreshComplete();
   bool supportsAsyncRefresh() const;
   void displayWindow(int x, int y, int w, int h);
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH,
                       bool turnOffScreen = false);
+  template <typename Mode>
+  void refreshDisplay(Mode mode, bool turnOffScreen = false) {
+    refreshDisplay(static_cast<RefreshMode>(mode), turnOffScreen);
+  }
   void setBusyWaitSliceHook(bool (*)(int8_t, uint8_t)) {}
+  // Touch X4 Pro UC8179 tuning — no-op on host (Murphy / sim use other panels).
+  void setSpiHz(uint32_t) {}
+  void setGrayPhaseBPll(bool, uint16_t, bool = false) {}
+  bool framebufferReady() const { return getFrameBuffer() != nullptr; }
+  void syncWriteBufferFromActive() const {}
+  void displayWhiteHoldClear() {}
+
+  bool isRefreshPending() const;
+  bool refreshBusy() const;
+  void skipInitialResync();
+  void setFastGrayScrub(bool enabled);
+  void copyGrayscalePlanesDirect(const uint8_t *lsbBuffer,
+                                 const uint8_t *msbBuffer);
+  void setDisplayX3();
 
   // Power management
   void deepSleep();
@@ -93,6 +119,9 @@ public:
 
   void displayGrayscaleBase(RefreshMode fallback = HALF_REFRESH,
                             bool turnOffScreen = false);
+  void displayGrayscaleBase(EInkDisplay::RefreshMode fallback, bool turnOffScreen = false) {
+    displayGrayscaleBase(static_cast<RefreshMode>(fallback), turnOffScreen);
+  }
   bool displayGrayscaleBase(GrayscaleMode mode,
                             RefreshMode fallback = HALF_REFRESH,
                             bool turnOffScreen = false);

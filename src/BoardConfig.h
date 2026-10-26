@@ -14,7 +14,8 @@
      defined(SIMULATOR_DEVICE_X4_CLASSIC) + defined(SIMULATOR_DEVICE_STICKY) + \
      defined(SIMULATOR_DEVICE_PAPERMONO) +                                     \
      defined(SIMULATOR_DEVICE_METALIO_EINK4) +                                 \
-     defined(SIMULATOR_DEVICE_EEGO_A4) + defined(SIMULATOR_DEVICE_PICCO)) > 1
+     defined(SIMULATOR_DEVICE_EEGO_A4) + defined(SIMULATOR_DEVICE_PICCO) +   \
+     defined(SIMULATOR_DEVICE_MURPHY)) > 1
 #error "Select at most one simulated device"
 #endif
 
@@ -57,11 +58,18 @@
 #undef FREEINK_DEVICE_METALIO_EINK4
 #undef FREEINK_DEVICE_EEGO_A4
 #undef FREEINK_DEVICE_PICCO
+#undef FREEINK_DEVICE_MURPHY
 
 #if defined(SIMULATOR_DEVICE_PICCO)
 #define FREEINK_DEVICE_PICCO 1
 #else
 #define FREEINK_DEVICE_PICCO 0
+#endif
+
+#if defined(SIMULATOR_DEVICE_MURPHY)
+#define FREEINK_DEVICE_MURPHY 1
+#else
+#define FREEINK_DEVICE_MURPHY 0
 #endif
 
 #if defined(SIMULATOR_DEVICE_EEGO_A4)
@@ -79,6 +87,15 @@
 #endif
 
 #if defined(SIMULATOR_DEVICE_PICCO)
+#define FREEINK_DEVICE_X4 0
+#define FREEINK_DEVICE_X3 0
+#define FREEINK_DEVICE_X4PRO 0
+#define FREEINK_DEVICE_X4CLASSIC 0
+#define FREEINK_DEVICE_STICKY 0
+#define FREEINK_DEVICE_PAPERMONO 0
+#define FREEINK_CAP_TOUCH 1
+#define FREEINK_CAP_FRONTLIGHT 1
+#elif defined(SIMULATOR_DEVICE_MURPHY)
 #define FREEINK_DEVICE_X4 0
 #define FREEINK_DEVICE_X3 0
 #define FREEINK_DEVICE_X4PRO 0
@@ -178,6 +195,7 @@ enum class Board {
   MetalioEInk4,
   EegoA4,
   Picco,
+  MurphyM3,
 };
 
 enum class DisplayController {
@@ -306,8 +324,15 @@ inline constexpr BoardProfile PICCO = {
     Board::Picco, "picco", DisplayController::SSD1677, 0, {21, 9, 6}, {},
     800,          480,     {TouchController::PiccoCst}};
 
+// Murphy M3 — UC8253 416×240 panel buffer (portrait UI 240×416).
+inline constexpr BoardProfile MURPHY_M3 = {
+    Board::MurphyM3, "murphy_m3", DisplayController::UC8253, 0, {4, 5}, {},
+    416,           240,         {TouchController::Chsc6x}};
+
 #if defined(SIMULATOR_DEVICE_PICCO)
 inline BoardProfile ACTIVE = PICCO;
+#elif defined(SIMULATOR_DEVICE_MURPHY)
+inline BoardProfile ACTIVE = MURPHY_M3;
 #elif defined(SIMULATOR_DEVICE_EEGO_A4)
 inline BoardProfile ACTIVE = EEGO_A4;
 #elif defined(SIMULATOR_DEVICE_METALIO_EINK4)
@@ -362,6 +387,9 @@ inline bool selectDevice(Board board) {
   case Board::Picco:
     ACTIVE = PICCO;
     return true;
+  case Board::MurphyM3:
+    ACTIVE = MURPHY_M3;
+    return true;
   }
   return false;
 }
@@ -373,9 +401,10 @@ inline bool isPaperMono() { return ACTIVE.board == Board::PaperMono; }
 inline bool isMetalioEInk4() { return ACTIVE.board == Board::MetalioEInk4; }
 inline bool isEegoA4() { return ACTIVE.board == Board::EegoA4; }
 inline bool isPicco() { return ACTIVE.board == Board::Picco; }
+inline bool isMurphyM3() { return ACTIVE.board == Board::MurphyM3; }
 inline bool hasTouch() {
   return isX4Pro() || isSticky() || isPaperMono() || isMetalioEInk4() ||
-         isEegoA4() || isPicco();
+         isEegoA4() || isPicco() || isMurphyM3();
 }
 inline bool hasHomeKey() { return isX4Pro() || isMetalioEInk4() || isEegoA4(); }
 inline bool hasPwmFrontlight() { return isX4Pro() || isPaperMono(); }

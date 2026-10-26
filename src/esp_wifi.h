@@ -16,3 +16,8 @@ inline esp_err_t esp_wifi_get_ps(wifi_ps_type_t *ps) {
   return ESP_OK;
 }
 inline esp_err_t esp_wifi_stop() { return ESP_OK; }
+inline esp_err_t esp_wifi_get_mode(wifi_mode_t *mode) {
+  if (!mode) return ESP_ERR_INVALID_ARG;
+  *mode = WIFI_STA;
+  return ESP_OK;
+}

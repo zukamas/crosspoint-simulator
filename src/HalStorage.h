@@ -109,11 +109,16 @@ public:
   size_t fileSize();
   uint64_t fileSize64();
   uint32_t modificationTime();
+  // SdFat-compatible FAT date/time (used by Touch glyph bank fingerprint).
+  bool getModifyDateTime(uint16_t *date, uint16_t *time);
   bool seek(size_t pos);
+  bool rewind() { return seekSet(0); }
   bool seek64(uint64_t pos);
   bool seekCur(int64_t offset);
   bool seekSet(size_t offset);
   bool truncate(uint64_t length);
+  // SdFat-compatible: truncate at the current write position.
+  bool truncate();
   int available() const;
   size_t position() const;
   int read(void *buf, size_t count);
@@ -127,6 +132,9 @@ public:
   void rewindDirectory();
   bool close();
   HalFile openNextFile();
+  // SdFat-compatible helpers used by Touch file manager.
+  void move(HalFile *other);
+  bool open(HalFile *dir, const char *path, int oflag);
   bool isOpen() const;
   operator bool() const;
 };
@@ -138,7 +146,7 @@ public:
 using FsFile = HalFile;
 #endif
 
-// Downstream code must use Storage instead of SdMan
-#ifdef SdMan
+// Downstream code must use Storage instead of SdMan (Touch TROS-m3 keeps SdMan).
+#if defined(SdMan) && !defined(TROS_SIMULATOR_SDMAN)
 #undef SdMan
 #endif

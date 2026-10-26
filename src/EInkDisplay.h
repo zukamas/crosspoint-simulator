@@ -30,10 +30,16 @@ public:
 #elif defined(SIMULATOR_DEVICE_EEGO_A4)
   static constexpr uint16_t DISPLAY_WIDTH = 768;
   static constexpr uint16_t DISPLAY_HEIGHT = 552;
+#elif defined(SIMULATOR_DEVICE_MURPHY)
+  static constexpr uint16_t DISPLAY_WIDTH = 416;
+  static constexpr uint16_t DISPLAY_HEIGHT = 240;
 #else
   static constexpr uint16_t DISPLAY_WIDTH = 800;
   static constexpr uint16_t DISPLAY_HEIGHT = 480;
 #endif
+
+  static constexpr uint16_t X3_DISPLAY_WIDTH = 792;
+  static constexpr uint16_t X3_DISPLAY_HEIGHT = 528;
 
   enum RefreshMode { FULL_REFRESH, HALF_REFRESH, FAST_REFRESH };
 
@@ -45,9 +51,22 @@ public:
                  uint16_t h, bool fromProgmem = false) {}
   void drawImageTransparent(const uint8_t *imageData, uint16_t x, uint16_t y,
                             uint16_t w, uint16_t h, bool fromProgmem = false) {}
-  void displayBuffer(RefreshMode mode, bool turnOffScreen) {}
-  void refreshDisplay(RefreshMode mode, bool turnOffScreen) {}
+  void displayBuffer(RefreshMode mode, bool turnOffScreen = false) {
+    (void)mode;
+    (void)turnOffScreen;
+  }
+  void displayBufferAsync(RefreshMode mode, bool turnOffScreen = false) {
+    displayBuffer(mode, turnOffScreen);
+  }
+  void refreshDisplay(RefreshMode mode, bool turnOffScreen = false) {
+    displayBuffer(mode, turnOffScreen);
+  }
   void deepSleep() {}
+  void setDisplayX3() {}
+  bool isRefreshPending() const { return false; }
+  bool refreshBusy() const { return false; }
+  void waitRefreshComplete() {}
+  void setBusyWaitSliceHook(bool (*)(int8_t, uint8_t)) {}
   uint8_t *getFrameBuffer() {
     static uint8_t buf[DISPLAY_WIDTH * DISPLAY_HEIGHT / 8];
     return buf;
@@ -60,6 +79,13 @@ public:
   void displayGrayBuffer(bool turnOffScreen = false,
                          const unsigned char *lut = nullptr,
                          bool factoryMode = false) {}
+  void skipInitialResync() {}
+  void setFastGrayScrub(bool enabled) { (void)enabled; }
+  void copyGrayscalePlanesDirect(const uint8_t *lsbBuffer,
+                                 const uint8_t *msbBuffer) {
+    copyGrayscaleLsbBuffers(lsbBuffer);
+    copyGrayscaleMsbBuffers(msbBuffer);
+  }
 };
 
 // Stub LUTs - unused in simulator but must exist so GfxRenderer.cpp compiles.

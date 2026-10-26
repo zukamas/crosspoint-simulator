@@ -1,8 +1,17 @@
 {
-  "name": "Crosspoint Simulator",
+  "name": "simulator",
   "version": "1.0.0",
   "license": "MIT",
   "build": {
+    "srcFilter": [
+      "+<*>",
+      "-<CrossPointWebServer.cpp>",
+      "-<firmware_link_stubs.cpp>",
+      "-<simulator_firmware.cpp>",
+      "-<simulator_ota.cpp>",
+      "-<WebServer.cpp>",
+      "-<WebSocketsServer.cpp>"
+    ],
     "extraScript": "run_simulator.py"
   }
 }

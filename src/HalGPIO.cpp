@@ -552,6 +552,9 @@ void HalGPIO::begin() {
   // BoardConfig carries the actual Sticky identity and capabilities.
   _deviceType = DeviceType::X4;
   BoardConfig::selectDevice(BoardConfig::Board::Sticky);
+#elif defined(SIMULATOR_DEVICE_MURPHY)
+  _deviceType = DeviceType::X4;
+  BoardConfig::selectDevice(BoardConfig::Board::MurphyM3);
 #elif defined(SIMULATOR_DEVICE_X4_PRO)
   _deviceType = DeviceType::X4;
   BoardConfig::selectDevice(BoardConfig::Board::XteinkX4Pro);
@@ -811,6 +814,8 @@ bool HalGPIO::wasTouchDown(float &nx, float &ny) const {
   ny = touchState.startNy;
   return true;
 }
+
+bool HalGPIO::isTouchPressed() const { return touchState.down; }
 
 bool HalGPIO::wasTouchReleased() const { return touchState.releasedThisFrame; }
 

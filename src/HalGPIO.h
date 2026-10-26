@@ -81,6 +81,7 @@ public:
   bool wasHomeKeyLongPressed() const;
   bool wasTouchTap(float &nx, float &ny) const;
   bool wasTouchDown(float &nx, float &ny) const;
+  bool isTouchPressed() const;
   bool wasTouchReleased() const;
   bool isTouchTapCandidate(float &nx, float &ny, unsigned long &heldMs) const;
   bool isTouchHeldAt(float &nx, float &ny) const;

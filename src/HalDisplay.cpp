@@ -307,6 +307,9 @@ static constexpr const char *WINDOW_TITLE =
 #elif defined(SIMULATOR_DEVICE_STICKY)
 static constexpr const char *WINDOW_TITLE =
     "Simulator - Seeed Sticky (SSD1677)";
+#elif defined(SIMULATOR_DEVICE_MURPHY)
+static constexpr const char *WINDOW_TITLE =
+    "Simulator - Murphy M3 (UC8253 240x416)";
 #elif defined(SIMULATOR_DEVICE_X4_PRO)
 static constexpr const char *WINDOW_TITLE =
     "Simulator - XTEINK X4 Pro (" SIMULATOR_CONTROLLER_TITLE ")";
@@ -636,5 +639,20 @@ uint16_t HalDisplay::getDisplayWidthBytes() const {
   return DISPLAY_WIDTH_BYTES;
 }
 uint32_t HalDisplay::getBufferSize() const { return BUFFER_SIZE; }
+
+bool HalDisplay::isRefreshPending() const { return einkDisplay.isRefreshPending(); }
+
+bool HalDisplay::refreshBusy() const { return einkDisplay.refreshBusy(); }
+
+void HalDisplay::skipInitialResync() { einkDisplay.skipInitialResync(); }
+
+void HalDisplay::setFastGrayScrub(bool enabled) { einkDisplay.setFastGrayScrub(enabled); }
+
+void HalDisplay::copyGrayscalePlanesDirect(const uint8_t *lsbBuffer,
+                                           const uint8_t *msbBuffer) {
+  einkDisplay.copyGrayscalePlanesDirect(lsbBuffer, msbBuffer);
+}
+
+void HalDisplay::setDisplayX3() { einkDisplay.setDisplayX3(); }
 
 HalDisplay display;
