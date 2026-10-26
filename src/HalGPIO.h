@@ -63,6 +63,9 @@ public:
   void update();
   bool isPressed(uint8_t buttonIndex) const;
   bool wasPressed(uint8_t buttonIndex) const;
+  void consumePress(uint8_t buttonIndex);
+  void consumeHomeKeyTap();
+  void consumeHomeKeyLongPress();
   bool wasAnyPressed() const;
   bool wasReleased(uint8_t buttonIndex) const;
   bool wasAnyReleased() const;
@@ -80,6 +83,8 @@ public:
   bool wasHomeKeyTapped() const;
   bool wasHomeKeyLongPressed() const;
   bool wasTouchTap(float &nx, float &ny) const;
+  void consumeTouchTap();
+  void consumeTouchPress();
   bool wasTouchDown(float &nx, float &ny) const;
   bool isTouchPressed() const;
   bool wasTouchReleased() const;

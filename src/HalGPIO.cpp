@@ -52,6 +52,48 @@ static const SDL_Scancode buttonScancode[NUM_BUTTONS] = {
     SDL_SCANCODE_P,      // BTN_POWER
 };
 
+namespace {
+
+const char *simButtonName(int button) {
+  static const char *kNames[NUM_BUTTONS] = {"BACK",    "CONFIRM", "LEFT",
+                                            "RIGHT",   "UP",      "DOWN",
+                                            "POWER"};
+  if (button >= 0 && button < NUM_BUTTONS) {
+    return kNames[button];
+  }
+  return "?";
+}
+
+void simLogInput(const char *tag, int button = -1) {
+  if (button >= 0) {
+    std::fprintf(stderr, "[sim-input] %s %s(%d)\n", tag, simButtonName(button),
+                 button);
+  } else {
+    std::fprintf(stderr, "[sim-input] %s\n", tag);
+  }
+  std::fflush(stderr);
+}
+
+void simLogTouch(const char *tag, float logicalNx, float logicalNy,
+                 float panelNx, float panelNy) {
+  const int logicalW = std::max(1, renderer.getScreenWidth());
+  const int logicalH = std::max(1, renderer.getScreenHeight());
+  const int lx =
+      static_cast<int>(std::lround(logicalNx * static_cast<float>(logicalW - 1)));
+  const int ly =
+      static_cast<int>(std::lround(logicalNy * static_cast<float>(logicalH - 1)));
+  const int px = static_cast<int>(
+      std::lround(panelNx * static_cast<float>(HalDisplay::DISPLAY_WIDTH - 1)));
+  const int py = static_cast<int>(
+      std::lround(panelNy * static_cast<float>(HalDisplay::DISPLAY_HEIGHT - 1)));
+  std::fprintf(stderr,
+               "[sim-input] %s logical=(%d,%d) panel=(%d,%d) nx=%.3f ny=%.3f\n",
+               tag, lx, ly, px, py, panelNx, panelNy);
+  std::fflush(stderr);
+}
+
+} // namespace
+
 static bool pressedThisFrame[NUM_BUTTONS] = {};
 static bool releasedThisFrame[NUM_BUTTONS] = {};
 static unsigned long buttonPressTime[NUM_BUTTONS] = {};
@@ -284,16 +326,19 @@ bool parseTouchSpec(const std::string &detail, float &x1, float &y1, float &x2,
 
 void requestSimulatorSleep() {
   simulatorSleepRequested = true;
-  // Current CrossPoint firmware sleeps on a held physical power button. Keep
-  // the compatibility latch above for older consumers, and also drive the
-  // current public HalGPIO state so the S shortcut follows the real firmware
-  // sleep path.
+  simLogInput("sleep-request");
+  // One-shot edge only — do not latch syntheticButtonDown[POWER]; that made
+  // isPowerButtonPressed() stick and tripped tryPowerButtonSleep (~3s) spuriously.
   pressedThisFrame[HalGPIO::BTN_POWER] = true;
-  syntheticButtonDown[HalGPIO::BTN_POWER] = true;
   buttonPressTime[HalGPIO::BTN_POWER] = SDL_GetTicks();
 }
 
 bool buttonAvailable(int button) {
+  // Murphy M3: right-side Up / Down / shared Confirm+Power only (no Back/L/R).
+  if (BoardConfig::isMurphyM3()) {
+    return button == HalGPIO::BTN_UP || button == HalGPIO::BTN_DOWN ||
+           button == HalGPIO::BTN_CONFIRM || button == HalGPIO::BTN_POWER;
+  }
   if (BoardConfig::isPicco())
     return button == HalGPIO::BTN_CONFIRM || button == HalGPIO::BTN_POWER ||
            button == HalGPIO::BTN_UP || button == HalGPIO::BTN_DOWN;
@@ -534,6 +579,44 @@ static int scancodeToButton(SDL_Scancode sc) {
   return -1;
 }
 
+// Murphy M3 keyboard: only the three physical keys (Up, Down, bottom Confirm/Power).
+static int scancodeToMurphyButton(SDL_Scancode sc) {
+  switch (sc) {
+  case SDL_SCANCODE_UP:
+    return HalGPIO::BTN_UP;
+  case SDL_SCANCODE_DOWN:
+    return HalGPIO::BTN_DOWN;
+  case SDL_SCANCODE_P:
+  case SDL_SCANCODE_RETURN:
+    return HalGPIO::BTN_POWER;
+  default:
+    return -1;
+  }
+}
+
+static int scancodeToActiveButton(SDL_Scancode sc) {
+  if (BoardConfig::isMurphyM3()) {
+    return scancodeToMurphyButton(sc);
+  }
+  return scancodeToButton(sc);
+}
+
+static void murphyLatchSharedBottomPress() {
+  pressedThisFrame[HalGPIO::BTN_POWER] = true;
+  pressedThisFrame[HalGPIO::BTN_CONFIRM] = true;
+  if (buttonPressTime[HalGPIO::BTN_POWER] == 0) {
+    buttonPressTime[HalGPIO::BTN_POWER] = SDL_GetTicks();
+  }
+  if (buttonPressTime[HalGPIO::BTN_CONFIRM] == 0) {
+    buttonPressTime[HalGPIO::BTN_CONFIRM] = SDL_GetTicks();
+  }
+}
+
+static void murphyLatchSharedBottomRelease() {
+  releasedThisFrame[HalGPIO::BTN_POWER] = true;
+  releasedThisFrame[HalGPIO::BTN_CONFIRM] = true;
+}
+
 void HalGPIO::begin() {
 #if defined(SIMULATOR_DEVICE_PICCO)
   _deviceType = DeviceType::X4;
@@ -625,48 +708,68 @@ void HalGPIO::update() {
   SDL_Event e;
   while (SDL_PollEvent(&e) != 0) {
     if (e.type == SDL_QUIT) {
+      simLogInput("quit");
       quitRequested.store(true);
     } else if (e.type == SDL_KEYDOWN && !e.key.repeat) {
       if (e.key.keysym.scancode == SLIDE_SWITCH_SCANCODE) {
         setToggleSwitch(!toggleSwitchOn);
         continue;
       }
-      if (e.key.keysym.scancode == SDL_SCANCODE_PAGEUP ||
-          e.key.keysym.scancode == SDL_SCANCODE_PAGEDOWN) {
-        beginCoverButton(
-            e.key.keysym.scancode == SDL_SCANCODE_PAGEUP ? BTN_UP : BTN_DOWN);
-        continue;
-      }
-      if (e.key.keysym.scancode == HOME_KEY_SCANCODE) {
-        beginHomeKey();
-        continue;
+      if (!BoardConfig::isMurphyM3()) {
+        if (e.key.keysym.scancode == SDL_SCANCODE_PAGEUP ||
+            e.key.keysym.scancode == SDL_SCANCODE_PAGEDOWN) {
+          beginCoverButton(
+              e.key.keysym.scancode == SDL_SCANCODE_PAGEUP ? BTN_UP : BTN_DOWN);
+          continue;
+        }
+        if (e.key.keysym.scancode == HOME_KEY_SCANCODE) {
+          simLogInput("home-down");
+          beginHomeKey();
+          continue;
+        }
       }
       if (e.key.keysym.scancode == SIMULATOR_SLEEP_SCANCODE) {
+        simLogInput("sleep");
         requestSimulatorSleep();
         continue;
       }
-      int btn = scancodeToButton(e.key.keysym.scancode);
+      int btn = scancodeToActiveButton(e.key.keysym.scancode);
       if (btn >= 0 && buttonAvailable(btn)) {
-        if (!coverButtonDown[btn]) {
+        simLogInput("keydown", btn);
+        if (BoardConfig::isMurphyM3() && btn == HalGPIO::BTN_POWER) {
+          murphyLatchSharedBottomPress();
+        } else if (!coverButtonDown[btn]) {
           pressedThisFrame[btn] = true;
           buttonPressTime[btn] = SDL_GetTicks();
         }
+      } else if (!BoardConfig::isMurphyM3()) {
+        simLogInput("keydown-unmapped");
       }
     } else if (e.type == SDL_KEYUP) {
-      if (e.key.keysym.scancode == SDL_SCANCODE_PAGEUP ||
-          e.key.keysym.scancode == SDL_SCANCODE_PAGEDOWN) {
-        endCoverButton(e.key.keysym.scancode == SDL_SCANCODE_PAGEUP ? BTN_UP
-                                                                    : BTN_DOWN);
-        continue;
+      if (!BoardConfig::isMurphyM3()) {
+        if (e.key.keysym.scancode == SDL_SCANCODE_PAGEUP ||
+            e.key.keysym.scancode == SDL_SCANCODE_PAGEDOWN) {
+          endCoverButton(e.key.keysym.scancode == SDL_SCANCODE_PAGEUP ? BTN_UP
+                                                                      : BTN_DOWN);
+          continue;
+        }
+        if (e.key.keysym.scancode == HOME_KEY_SCANCODE) {
+          simLogInput("home-up");
+          endHomeKey();
+          continue;
+        }
       }
-      if (e.key.keysym.scancode == HOME_KEY_SCANCODE) {
-        endHomeKey();
-        continue;
-      }
-      int btn = scancodeToButton(e.key.keysym.scancode);
+      int btn = scancodeToActiveButton(e.key.keysym.scancode);
       if (btn >= 0 && buttonAvailable(btn)) {
-        if (!coverButtonDown[btn])
+        simLogInput("keyup", btn);
+        if (BoardConfig::isMurphyM3() && btn == HalGPIO::BTN_POWER) {
+          murphyLatchSharedBottomRelease();
+          buttonPressTime[HalGPIO::BTN_POWER] = 0;
+          buttonPressTime[HalGPIO::BTN_CONFIRM] = 0;
+        } else if (!coverButtonDown[btn]) {
           releasedThisFrame[btn] = true;
+          buttonPressTime[btn] = 0;
+        }
       }
     } else if (e.type == SDL_MOUSEBUTTONDOWN &&
                e.button.button == SDL_BUTTON_LEFT) {
@@ -676,6 +779,12 @@ void HalGPIO::update() {
       const float logicalNy =
           static_cast<float>(e.button.y) /
           std::max(1, static_cast<int>(renderer.getScreenHeight()) - 1);
+      {
+        float panelNx = 0.0f;
+        float panelNy = 0.0f;
+        logicalToPanelNormalized(logicalNx, logicalNy, panelNx, panelNy);
+        simLogTouch("touch-down", logicalNx, logicalNy, panelNx, panelNy);
+      }
       beginTouch(logicalNx, logicalNy);
     } else if (e.type == SDL_MOUSEMOTION && touchState.down) {
       const float logicalNx =
@@ -694,17 +803,99 @@ void HalGPIO::update() {
           static_cast<float>(e.button.y) /
           std::max(1, static_cast<int>(renderer.getScreenHeight()) - 1);
       endTouch(logicalNx, logicalNy);
+      {
+        float panelNx = 0.0f;
+        float panelNy = 0.0f;
+        logicalToPanelNormalized(logicalNx, logicalNy, panelNx, panelNy);
+        simLogTouch("touch-up", logicalNx, logicalNy, panelNx, panelNy);
+        if (!touchState.movedBeyondTapSlop &&
+            touchState.lastHeldMs <= TOUCH_SWIPE_MAX_MS) {
+          simLogTouch("touch-tap", logicalNx, logicalNy, touchState.startNx,
+                      touchState.startNy);
+        } else if (touchState.movedBeyondTapSlop) {
+          simLogTouch("touch-swipe", logicalNx, logicalNy, touchState.startNx,
+                      touchState.startNy);
+        }
+      }
     }
   }
   processSyntheticEvents();
   updateTouchHold();
   updateHomeKeyHold();
+
+  // Latch edges from keyboard state so a tap is not lost when beginFrame() cleared
+  // pressedThisFrame before this update(), and so held keys still deliver release.
+  static bool prevKeyDown[NUM_BUTTONS] = {};
+  const uint8_t *ks = SDL_GetKeyboardState(nullptr);
+  for (int i = 0; i < NUM_BUTTONS; ++i) {
+    if (!buttonAvailable(i)) {
+      prevKeyDown[i] = false;
+      continue;
+    }
+    if (BoardConfig::isMurphyM3() && i == HalGPIO::BTN_CONFIRM) {
+      prevKeyDown[i] = prevKeyDown[HalGPIO::BTN_POWER];
+      continue;
+    }
+
+    bool down = false;
+    if (BoardConfig::isMurphyM3()) {
+      if (i == HalGPIO::BTN_UP) {
+        down = ks != nullptr && ks[SDL_SCANCODE_UP];
+      } else if (i == HalGPIO::BTN_DOWN) {
+        down = ks != nullptr && ks[SDL_SCANCODE_DOWN];
+      } else if (i == HalGPIO::BTN_POWER) {
+        down = ks != nullptr && (ks[SDL_SCANCODE_P] || ks[SDL_SCANCODE_RETURN]);
+      }
+      down = down || syntheticButtonDown[i] || coverButtonDown[i];
+    } else {
+      down = (ks != nullptr && ks[buttonScancode[i]]) || syntheticButtonDown[i] ||
+             coverButtonDown[i];
+    }
+
+    if (down && !prevKeyDown[i]) {
+      pressedThisFrame[i] = true;
+      if (BoardConfig::isMurphyM3() && i == HalGPIO::BTN_POWER) {
+        pressedThisFrame[HalGPIO::BTN_CONFIRM] = true;
+      }
+      if (buttonPressTime[i] == 0) {
+        buttonPressTime[i] = SDL_GetTicks();
+      }
+      if (BoardConfig::isMurphyM3() && i == HalGPIO::BTN_POWER &&
+          buttonPressTime[HalGPIO::BTN_CONFIRM] == 0) {
+        buttonPressTime[HalGPIO::BTN_CONFIRM] = buttonPressTime[i];
+      }
+    } else if (!down && prevKeyDown[i]) {
+      releasedThisFrame[i] = true;
+      buttonPressTime[i] = 0;
+      if (BoardConfig::isMurphyM3() && i == HalGPIO::BTN_POWER) {
+        releasedThisFrame[HalGPIO::BTN_CONFIRM] = true;
+        buttonPressTime[HalGPIO::BTN_CONFIRM] = 0;
+      }
+    }
+    prevKeyDown[i] = down;
+  }
 }
 
 bool HalGPIO::isPressed(uint8_t buttonIndex) const {
   if (buttonIndex >= NUM_BUTTONS || !buttonAvailable(buttonIndex))
     return false;
   const uint8_t *state = SDL_GetKeyboardState(NULL);
+  if (BoardConfig::isMurphyM3()) {
+    if (buttonIndex == HalGPIO::BTN_UP) {
+      return state[SDL_SCANCODE_UP] || syntheticButtonDown[buttonIndex] ||
+             coverButtonDown[buttonIndex];
+    }
+    if (buttonIndex == HalGPIO::BTN_DOWN) {
+      return state[SDL_SCANCODE_DOWN] || syntheticButtonDown[buttonIndex] ||
+             coverButtonDown[buttonIndex];
+    }
+    if (buttonIndex == HalGPIO::BTN_CONFIRM || buttonIndex == HalGPIO::BTN_POWER) {
+      return state[SDL_SCANCODE_P] || state[SDL_SCANCODE_RETURN] ||
+             syntheticButtonDown[HalGPIO::BTN_POWER] ||
+             coverButtonDown[HalGPIO::BTN_POWER];
+    }
+    return false;
+  }
   return state[buttonScancode[buttonIndex]] ||
          syntheticButtonDown[buttonIndex] || coverButtonDown[buttonIndex];
 }
@@ -721,6 +912,16 @@ bool HalGPIO::wasPressed(uint8_t buttonIndex) const {
     return false;
   return pressedThisFrame[buttonIndex];
 }
+
+void HalGPIO::consumePress(uint8_t buttonIndex) {
+  if (buttonIndex < NUM_BUTTONS) {
+    pressedThisFrame[buttonIndex] = false;
+  }
+}
+
+void HalGPIO::consumeHomeKeyTap() { homeKeyTappedThisFrame = false; }
+
+void HalGPIO::consumeHomeKeyLongPress() { homeKeyLongPressedThisFrame = false; }
 
 bool HalGPIO::wasReleased(uint8_t buttonIndex) const {
   if (buttonIndex >= NUM_BUTTONS || !buttonAvailable(buttonIndex))
@@ -763,10 +964,22 @@ unsigned long HalGPIO::getHeldTime() const {
 }
 
 unsigned long HalGPIO::getPowerButtonHeldTime() const {
-  const uint8_t *state = SDL_GetKeyboardState(NULL);
-  if ((!state[buttonScancode[BTN_POWER]] && !syntheticButtonDown[BTN_POWER]) ||
-      buttonPressTime[BTN_POWER] == 0)
+  if (buttonPressTime[BTN_POWER] == 0) {
     return 0;
+  }
+  if (BoardConfig::isMurphyM3()) {
+    const uint8_t *state = SDL_GetKeyboardState(NULL);
+    const bool down = (state != nullptr && (state[SDL_SCANCODE_P] || state[SDL_SCANCODE_RETURN])) ||
+                      syntheticButtonDown[BTN_POWER];
+    if (!down) {
+      return 0;
+    }
+    return SDL_GetTicks() - buttonPressTime[BTN_POWER];
+  }
+  const uint8_t *state = SDL_GetKeyboardState(NULL);
+  if (!state[buttonScancode[BTN_POWER]] && !syntheticButtonDown[BTN_POWER]) {
+    return 0;
+  }
   return SDL_GetTicks() - buttonPressTime[BTN_POWER];
 }
 
@@ -806,6 +1019,10 @@ bool HalGPIO::wasTouchTap(float &nx, float &ny) const {
   ny = touchState.startNy;
   return true;
 }
+
+void HalGPIO::consumeTouchTap() { touchState.releasedThisFrame = false; }
+
+void HalGPIO::consumeTouchPress() { touchState.pressedThisFrame = false; }
 
 bool HalGPIO::wasTouchDown(float &nx, float &ny) const {
   if (!touchState.pressedThisFrame)
@@ -896,8 +1113,9 @@ void HalGPIO::startDeepSleep() {
 
   while (true) {
     processSyntheticEvents();
-    if (quitRequested.load())
-      return;
+    if (quitRequested.load()) {
+      std::exit(0);
+    }
     for (int button = 0; button < NUM_BUTTONS; button++) {
       if (syntheticButtonDown[button]) {
         clearButtonState();
@@ -909,7 +1127,7 @@ void HalGPIO::startDeepSleep() {
     while (SDL_PollEvent(&e) != 0) {
       if (e.type == SDL_QUIT) {
         quitRequested.store(true);
-        return;
+        std::exit(0);
       }
 
       if (e.type == SDL_KEYDOWN && !e.key.repeat &&
@@ -918,11 +1136,13 @@ void HalGPIO::startDeepSleep() {
         continue;
       }
 
-      if (e.type == SDL_KEYDOWN && !e.key.repeat &&
-          scancodeToButton(e.key.keysym.scancode) >= 0 &&
-          buttonAvailable(scancodeToButton(e.key.keysym.scancode))) {
-        clearButtonState();
-        SimulatorLifecycle::rebootAsPowerWake();
+      if (e.type == SDL_KEYDOWN && !e.key.repeat) {
+        const int btn = scancodeToActiveButton(e.key.keysym.scancode);
+        if (btn >= 0 && buttonAvailable(btn)) {
+          simLogInput("wake-keydown", btn);
+          clearButtonState();
+          SimulatorLifecycle::rebootAsPowerWake();
+        }
       }
     }
 
