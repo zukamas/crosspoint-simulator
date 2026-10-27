@@ -508,6 +508,17 @@ void HalDisplay::presentIfNeeded() {
   SDL_RenderPresent(sdl_renderer);
 }
 
+bool HalDisplay::saveScreenshotBmp(const char *path) {
+  if (!path || path[0] == '\0') {
+    return false;
+  }
+  if (std::this_thread::get_id() != simulatorMainThread) {
+    return false;
+  }
+  presentIfNeeded();
+  return saveRendererBmp(std::string(path));
+}
+
 bool HalDisplay::shouldQuit() const { return quitRequested.load(); }
 
 void HalDisplay::deepSleep() { presentIfNeeded(); }

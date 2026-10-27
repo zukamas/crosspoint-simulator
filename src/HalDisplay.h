@@ -149,6 +149,8 @@ public:
 
   // Simulator only: call from main thread to push rendered pixels to SDL.
   void presentIfNeeded();
+  // Simulator only: present then write the SDL window to a BMP file.
+  bool saveScreenshotBmp(const char *path);
   // Simulator only: returns true once a hard shutdown has been requested.
   bool shouldQuit() const;
 
