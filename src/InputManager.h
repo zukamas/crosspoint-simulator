@@ -56,6 +56,7 @@ class InputManager {
   bool wasHomeKeyTapped() const;
   bool wasHomeKeyLongPressed() const;
   bool popTouchLongHoldRelease(unsigned long& heldMs);
+  unsigned long lastTouchHeldMs() const;
 
   static const char* getButtonName(uint8_t buttonIndex);
 };
