@@ -58,5 +58,8 @@ class InputManager {
   bool popTouchLongHoldRelease(unsigned long& heldMs);
   unsigned long lastTouchHeldMs() const;
 
+  // Matches freeink-sdk InputManager (long-hold queue threshold, not swipe).
+  static constexpr unsigned long TOUCH_HOLD_GESTURE_MIN_MS = 750;
+
   static const char* getButtonName(uint8_t buttonIndex);
 };
